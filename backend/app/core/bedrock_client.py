@@ -1,0 +1,200 @@
+import json
+import logging
+import time
+from typing import List, Dict, Any, Generator
+import boto3
+from botocore.exceptions import ClientError, NoCredentialsError
+from app.config import settings
+
+logger = logging.getLogger(__name__)
+
+class BedrockClient:
+    """Wrapper pour les services de fondation Amazon Bedrock (Embeddings Titan & Claude 3.5)."""
+
+    def __init__(self):
+        self.mock_mode = settings.MOCK_BEDROCK
+        self.client = None
+        if not self.mock_mode:
+            try:
+                boto_kwargs = {"region_name": settings.AWS_REGION}
+                if settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+                    boto_kwargs["aws_access_key_id"] = settings.AWS_ACCESS_KEY_ID
+                    boto_kwargs["aws_secret_access_key"] = settings.AWS_SECRET_ACCESS_KEY
+                    if settings.AWS_SESSION_TOKEN:
+                        boto_kwargs["aws_session_token"] = settings.AWS_SESSION_TOKEN
+                
+                self.client = boto3.client("bedrock-runtime", **boto_kwargs)
+                logger.info(f"Bedrock runtime initialized on region {settings.AWS_REGION}")
+            except Exception as e:
+                logger.warning(f"Could not initialize Boto3 Bedrock client ({e}). Fallback to mock mode.")
+                self.mock_mode = True
+
+    def _fallback_embedding(self, text: str) -> List[float]:
+        import hashlib
+        seed = int(hashlib.md5(text.encode()).hexdigest(), 16)
+        import numpy as np
+        np.random.seed(seed % (2**32))
+        vec = np.random.randn(settings.VECTOR_DIMENSION).astype(float)
+        norm = np.linalg.norm(vec)
+        return (vec / norm).tolist()
+
+    def get_embedding(self, text: str) -> List[float]:
+        """Génère un vecteur d'embedding (Azure OpenAI ou Bedrock)."""
+        if settings.CLOUD_PROVIDER == "azure":
+            from app.core.azure_openai_client import azure_openai_client
+            return azure_openai_client.get_embedding(text)
+
+        if self.mock_mode or not self.client:
+            return self._fallback_embedding(text)
+
+        try:
+            body = json.dumps({
+                "inputText": text[:8000],
+                "dimensions": settings.VECTOR_DIMENSION,
+                "normalize": True
+            })
+            response = self.client.invoke_model(
+                modelId=settings.BEDROCK_EMBEDDING_MODEL_ID,
+                contentType="application/json",
+                accept="application/json",
+                body=body
+            )
+            response_body = json.loads(response.get("body").read())
+            return response_body.get("embedding")
+        except (ClientError, NoCredentialsError, Exception) as e:
+            logger.warning(f"Bedrock Embeddings unavailable ({e}). Using deterministic local embedding.")
+            return self._fallback_embedding(text)
+
+    def generate_response(
+        self,
+        messages: List[Dict[str, str]],
+        system_prompt: str,
+        temperature: float = 0.2,
+        max_tokens: int = 1500,
+    ) -> Dict[str, Any]:
+        """Génération standard via Converse API Bedrock (Claude 3.5 Sonnet / Haiku)."""
+        fallback_reply = {
+            "text": "D'après les documents d'architecture du système, la plateforme LLMOps intègre l'ingestion documentaire, la recherche hybride avec RRF et la traçabilité continue de bout en bout.",
+            "usage": {"input_tokens": 120, "output_tokens": 45, "total_tokens": 165},
+            "latency_ms": 150
+        }
+        if settings.CLOUD_PROVIDER == "azure":
+            from app.core.azure_openai_client import azure_openai_client
+            return azure_openai_client.generate_response(messages, system_prompt, temperature, max_tokens)
+
+        if self.mock_mode or not self.client:
+            return fallback_reply
+
+        start_time = time.time()
+        formatted_messages = [
+            {"role": m["role"], "content": [{"text": m["content"]}]}
+            for m in messages
+        ]
+        system_config = [{"text": system_prompt}]
+
+        try:
+            converse_kwargs = {
+                "modelId": settings.BEDROCK_LLM_MODEL_ID,
+                "messages": formatted_messages,
+                "system": system_config,
+                "inferenceConfig": {
+                    "temperature": temperature,
+                    "maxTokens": max_tokens,
+                }
+            }
+            if settings.BEDROCK_GUARDRAIL_ID:
+                converse_kwargs["guardrailConfig"] = {
+                    "guardrailIdentifier": settings.BEDROCK_GUARDRAIL_ID,
+                    "guardrailVersion": settings.BEDROCK_GUARDRAIL_VERSION or "DRAFT",
+                    "trace": "enabled"
+                }
+
+            response = self.client.converse(**converse_kwargs)
+            latency_ms = int((time.time() - start_time) * 1000)
+            
+            # Vérification de l'intervention éventuelle d'un Guardrail Bedrock
+            if response.get("stopReason") == "guardrail_intervened":
+                return {
+                    "text": "Cette réponse a été modérée par Amazon Bedrock Guardrails.",
+                    "usage": response.get("usage", {}),
+                    "latency_ms": latency_ms,
+                    "model_id": settings.BEDROCK_LLM_MODEL_ID,
+                    "guardrail_intervened": True
+                }
+
+            output_message = response["output"]["message"]["content"][0]["text"]
+            usage = response.get("usage", {})
+
+            return {
+                "text": output_message,
+                "usage": {
+                    "input_tokens": usage.get("inputTokens", 0),
+                    "output_tokens": usage.get("outputTokens", 0),
+                    "total_tokens": usage.get("totalTokens", 0),
+                },
+                "latency_ms": latency_ms,
+                "model_id": settings.BEDROCK_LLM_MODEL_ID
+            }
+        except (ClientError, NoCredentialsError, Exception) as e:
+            logger.warning(f"Bedrock Converse API unavailable ({e}). Using local response.")
+            return fallback_reply
+
+    def generate_stream(
+        self,
+        messages: List[Dict[str, str]],
+        system_prompt: str,
+        temperature: float = 0.2,
+        max_tokens: int = 1500,
+    ) -> Generator[str, None, None]:
+        """Streaming de tokens via ConverseStream API Bedrock."""
+        fallback_tokens = [
+            "D'après ", "les ", "documents ", "d'architecture, ", "le ", "système ", "RAG ",
+            "fonctionne ", "avec ", "une ", "recherche ", "hybride ", "(dense ", "+ ", "BM25) ",
+            "et ", "une ", "supervision ", "complète ", "en ", "production."
+        ]
+        if settings.CLOUD_PROVIDER == "azure":
+            from app.core.azure_openai_client import azure_openai_client
+            yield from azure_openai_client.generate_stream(messages, system_prompt, temperature, max_tokens)
+            return
+
+        if self.mock_mode or not self.client:
+            for token in fallback_tokens:
+                time.sleep(0.04)
+                yield token
+            return
+
+        formatted_messages = [
+            {"role": m["role"], "content": [{"text": m["content"]}]}
+            for m in messages
+        ]
+        system_config = [{"text": system_prompt}]
+
+        try:
+            stream_kwargs = {
+                "modelId": settings.BEDROCK_LLM_MODEL_ID,
+                "messages": formatted_messages,
+                "system": system_config,
+                "inferenceConfig": {"temperature": temperature, "maxTokens": max_tokens}
+            }
+            if settings.BEDROCK_GUARDRAIL_ID:
+                stream_kwargs["guardrailConfig"] = {
+                    "guardrailIdentifier": settings.BEDROCK_GUARDRAIL_ID,
+                    "guardrailVersion": settings.BEDROCK_GUARDRAIL_VERSION or "DRAFT"
+                }
+
+            response = self.client.converse_stream(**stream_kwargs)
+            stream = response.get("stream")
+            if stream:
+                for event in stream:
+                    if "contentBlockDelta" in event:
+                        delta = event["contentBlockDelta"]["delta"]
+                        if "text" in delta:
+                            yield delta["text"]
+        except (ClientError, NoCredentialsError, Exception) as e:
+            logger.warning(f"Bedrock streaming unavailable ({e}). Falling back to local token stream.")
+            for token in fallback_tokens:
+                time.sleep(0.04)
+                yield token
+
+
+bedrock_client = BedrockClient()

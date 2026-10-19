@@ -1,0 +1,84 @@
+import React, { useState } from 'react';
+import { FileText, ChevronDown, ChevronUp } from 'lucide-react';
+import { SourceChunk } from '../../types';
+
+interface SourceCardProps {
+  source: SourceChunk;
+  index?: number;
+  highlighted?: boolean;
+}
+
+export const SourceCard: React.FC<SourceCardProps> = ({ source, index, highlighted = false }) => {
+  const [expanded, setExpanded] = useState(highlighted);
+
+  React.useEffect(() => {
+    if (highlighted) {
+      setExpanded(true);
+    }
+  }, [highlighted]);
+
+  const score = source.rerank_score ?? source.similarity_score ?? 0;
+  const scorePercent = Math.min(100, Math.round(score * 100));
+
+  const getScoreBadge = (pct: number) => {
+    if (pct >= 60) {
+      return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20';
+    }
+    if (pct >= 30) {
+      return 'bg-sky-500/10 text-sky-700 dark:text-sky-400 border-sky-500/20';
+    }
+    return 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20';
+  };
+
+  return (
+    <div 
+      id={index ? `source-card-${index}` : undefined}
+      className={`border rounded-2xl p-4 text-sm transition-all shadow-sm dark:shadow-none scroll-mt-20 ${
+        highlighted
+          ? 'border-orange-500 ring-2 ring-orange-500/30 bg-orange-50/40 dark:bg-orange-950/20'
+          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700'
+      }`}
+    >
+      <div 
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        className="flex items-center justify-between cursor-pointer select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 rounded-xl"
+        onClick={() => setExpanded(!expanded)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setExpanded(!expanded);
+          }
+        }}
+      >
+        <div className="flex items-center gap-3 overflow-hidden">
+          <div className="w-8 h-8 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0 font-bold text-xs text-orange-600 dark:text-orange-400">
+            {index !== undefined ? (
+              <span>#{index}</span>
+            ) : (
+              <FileText className="w-4 h-4 text-orange-500 dark:text-orange-400" />
+            )}
+          </div>
+          <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+            {source.metadata.source} (page {source.metadata.page || 1})
+          </span>
+        </div>
+        <div className="flex items-center gap-3 shrink-0">
+          <span className={`px-2.5 py-0.5 rounded-full text-xs font-mono font-medium border ${getScoreBadge(scorePercent)}`}>
+            {scorePercent}% match
+          </span>
+          <div className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors">
+            {expanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+          </div>
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-mono text-xs leading-relaxed bg-slate-50/90 dark:bg-[#0b0f17]/80 p-4 rounded-xl border border-slate-200/60 dark:border-slate-800/80">
+          {source.content}
+        </div>
+      )}
+    </div>
+  );
+};
