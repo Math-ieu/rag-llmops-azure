@@ -22,8 +22,8 @@ interface DocumentUploaderProps {
 
 const STEPS = [
   'Lecture du fichier',
-  'Archivage Amazon S3',
-  'Vectorisation Titan',
+  'Archivage Azure Blob Storage',
+  'Vectorisation text-embedding-3',
   'Indexation pgvector'
 ];
 
@@ -327,7 +327,7 @@ export const DocumentUploader: React.FC<DocumentUploaderProps> = ({ onIndexedSuc
             <span>Embedding</span>
           </div>
           <p className="text-lg font-bold text-slate-900 dark:text-white mt-2">
-            Titan Text v2 <span className="text-xs font-normal text-slate-400">(1024d)</span>
+            text-embedding-3-small <span className="text-xs font-normal text-slate-400">(1536d)</span>
           </p>
         </div>
 
@@ -456,7 +456,7 @@ export const DocumentUploader: React.FC<DocumentUploaderProps> = ({ onIndexedSuc
             </div>
 
             <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-              Voulez-vous supprimer définitivement <span className="font-semibold text-slate-900 dark:text-white font-mono break-all">"{docToDelete}"</span> d'Amazon S3 et de la base vectorielle pgvector ?
+              Voulez-vous supprimer définitivement <span className="font-semibold text-slate-900 dark:text-white font-mono break-all">"{docToDelete}"</span> d'Azure Blob Storage et de la base vectorielle pgvector ?
             </p>
 
             <div className="flex items-center justify-end gap-2.5 pt-2">

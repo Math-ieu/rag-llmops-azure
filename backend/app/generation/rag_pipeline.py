@@ -135,8 +135,8 @@ class RAGPipeline:
         total_latency_ms = int((time.time() - start_time) * 1000)
         trace.update(metadata={"total_latency_ms": total_latency_ms, "cost_usd": cost_usd})
 
-        # 5. Enregistrement dans le Cache Sémantique
-        if settings.SEMANTIC_CACHE_ENABLED and not gen_result.get("guardrail_intervened"):
+        is_fallback = "D'après les documents d'architecture" in gen_result.get("text", "")
+        if settings.SEMANTIC_CACHE_ENABLED and not gen_result.get("guardrail_intervened") and not is_fallback:
             if query_embedding is None:
                 query_embedding = bedrock_client.get_embedding(effective_query)
             semantic_cache.store(
@@ -239,7 +239,8 @@ class RAGPipeline:
         cost_usd = self._calculate_cost(in_tokens, out_tokens)
 
         # Enregistrement dans le cache sémantique
-        if settings.SEMANTIC_CACHE_ENABLED and full_text.strip():
+        is_fallback = "D'après les documents d'architecture" in full_text
+        if settings.SEMANTIC_CACHE_ENABLED and full_text.strip() and not is_fallback:
             if query_embedding is None:
                 query_embedding = bedrock_client.get_embedding(effective_query)
             semantic_cache.store(

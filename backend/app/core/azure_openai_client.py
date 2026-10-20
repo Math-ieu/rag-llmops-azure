@@ -60,7 +60,7 @@ class AzureOpenAIClient:
         temperature: float = 0.2,
         max_tokens: int = 1500,
     ) -> Dict[str, Any]:
-        """Génération standard via Azure OpenAI Chat Completions (GPT-4o / GPT-4o-mini)."""
+        """Génération standard via Azure OpenAI Chat Completions (GPT-4o / GPT-5-mini)."""
         fallback_reply = {
             "text": "D'après les documents d'architecture du système hébergé sur Microsoft Azure, la plateforme LLMOps intègre l'ingestion documentaire, la recherche vectorielle avec pgvector et la supervision continue de bout en bout.",
             "usage": {"input_tokens": 120, "output_tokens": 45, "total_tokens": 165},
@@ -74,13 +74,34 @@ class AzureOpenAIClient:
         for m in messages:
             chat_messages.append({"role": m["role"], "content": m["content"]})
 
+        is_reasoning_model = any(
+            x in settings.AZURE_OPENAI_CHAT_DEPLOYMENT.lower()
+            for x in ["gpt-5", "o1", "o3", "reasoning", "mini", "chat"]
+        )
+
+        request_kwargs: Dict[str, Any] = {
+            "model": settings.AZURE_OPENAI_CHAT_DEPLOYMENT,
+            "messages": chat_messages,
+        }
+
+        if is_reasoning_model:
+            request_kwargs["max_completion_tokens"] = max(max_tokens, 2500)
+        else:
+            request_kwargs["max_tokens"] = max_tokens
+            request_kwargs["temperature"] = temperature
+
         try:
-            response = self.client.chat.completions.create(
-                model=settings.AZURE_OPENAI_CHAT_DEPLOYMENT,
-                messages=chat_messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
+            try:
+                response = self.client.chat.completions.create(**request_kwargs)
+            except Exception as first_err:
+                logger.info(f"Premier essai Azure OpenAI a renvoyé: {first_err}. Tentative avec format universel...")
+                fallback_kwargs = {
+                    "model": settings.AZURE_OPENAI_CHAT_DEPLOYMENT,
+                    "messages": chat_messages,
+                    "max_completion_tokens": max(max_tokens, 2500)
+                }
+                response = self.client.chat.completions.create(**fallback_kwargs)
+
             latency_ms = int((time.time() - start_time) * 1000)
             choice = response.choices[0]
             usage = response.usage
@@ -96,7 +117,7 @@ class AzureOpenAIClient:
                 "model_id": settings.AZURE_OPENAI_CHAT_DEPLOYMENT
             }
         except Exception as e:
-            logger.warning(f"Azure OpenAI Chat Completions indisponible ({e}). Utilisation de la réponse locale.")
+            logger.error(f"Azure OpenAI Chat Completions indisponible ({e}). Utilisation de la réponse locale.", exc_info=True)
             return fallback_reply
 
     def generate_stream(
@@ -122,19 +143,49 @@ class AzureOpenAIClient:
         for m in messages:
             chat_messages.append({"role": m["role"], "content": m["content"]})
 
+        is_reasoning_model = any(
+            x in settings.AZURE_OPENAI_CHAT_DEPLOYMENT.lower()
+            for x in ["gpt-5", "o1", "o3", "reasoning", "mini", "chat"]
+        )
+
+        request_kwargs: Dict[str, Any] = {
+            "model": settings.AZURE_OPENAI_CHAT_DEPLOYMENT,
+            "messages": chat_messages,
+            "stream": True,
+        }
+
+        if is_reasoning_model:
+            request_kwargs["max_completion_tokens"] = max(max_tokens, 2500)
+        else:
+            request_kwargs["max_tokens"] = max_tokens
+            request_kwargs["temperature"] = temperature
+
         try:
-            stream = self.client.chat.completions.create(
-                model=settings.AZURE_OPENAI_CHAT_DEPLOYMENT,
-                messages=chat_messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                stream=True
-            )
+            try:
+                stream = self.client.chat.completions.create(**request_kwargs)
+            except Exception as first_err:
+                logger.info(f"Premier essai streaming Azure OpenAI a renvoyé: {first_err}. Tentative avec format universel...")
+                fallback_kwargs = {
+                    "model": settings.AZURE_OPENAI_CHAT_DEPLOYMENT,
+                    "messages": chat_messages,
+                    "max_completion_tokens": max(max_tokens, 2500),
+                    "stream": True
+                }
+                stream = self.client.chat.completions.create(**fallback_kwargs)
+
+            token_yielded = False
             for chunk in stream:
                 if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
+                    token_yielded = True
                     yield chunk.choices[0].delta.content
+
+            if not token_yielded:
+                logger.info("Aucun token delta de contenu dans le flux (phase de raisonnement). Appel de fallback direct...")
+                res = self.generate_response(messages, system_prompt, temperature, max_tokens)
+                if res.get("text"):
+                    yield res["text"]
         except Exception as e:
-            logger.warning(f"Azure OpenAI streaming indisponible ({e}). Bascule sur tokens locaux.")
+            logger.error(f"Azure OpenAI streaming indisponible ({e}). Bascule sur tokens locaux.", exc_info=True)
             for token in fallback_tokens:
                 time.sleep(0.04)
                 yield token
