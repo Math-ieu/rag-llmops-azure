@@ -58,15 +58,15 @@ export const App: React.FC = () => {
       console.warn('Backend not ready yet, using default health mock data');
       setHealth({
         status: 'healthy',
-        app_name: 'RAG-LLMOps-AWS',
-        environment: 'development',
-        aws_region: 'us-east-1',
-        bedrock_llm_model: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
-        bedrock_embedding_model: 'amazon.titan-embed-text-v2:0',
+        app_name: 'RAG-LLMOps-Azure',
+        environment: 'production',
+        aws_region: 'eastus',
+        bedrock_llm_model: 'gpt-5-mini (Azure OpenAI)',
+        bedrock_embedding_model: 'text-embedding-3-small (1536d)',
         mock_bedrock: false,
         prompt_version: 'v1.2.0',
         total_chunks_indexed: 4,
-        vector_store_type: 'pgvector (PostgreSQL)'
+        vector_store_type: 'pgvector (Azure PostgreSQL)'
       });
     }
   };
