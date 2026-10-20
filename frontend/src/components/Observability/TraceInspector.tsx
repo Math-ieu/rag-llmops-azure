@@ -54,6 +54,7 @@ export const TraceInspector: React.FC<TraceInspectorProps> = ({ health }) => {
   const satisfactionRate = telemetry?.satisfaction_rate ?? 96.0;
   const isLive = telemetry?.is_live ?? false;
   const totalQueries = telemetry?.total_queries ?? 0;
+  const llmModel = telemetry?.llm_model || telemetry?.bedrock_llm_model || health?.llm_model || health?.bedrock_llm_model || 'Azure OpenAI (gpt-5-mini)';
 
   return (
     <div className="w-full max-w-7xl mx-auto px-6 sm:px-8 lg:px-10 py-8 space-y-8">
@@ -133,7 +134,7 @@ export const TraceInspector: React.FC<TraceInspectorProps> = ({ health }) => {
             </div>
             <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 font-mono mt-2">
               <span>Cumulé: ${totalCost.toFixed(4)}</span>
-              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Claude 3.5</span>
+              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{llmModel}</span>
             </div>
           </div>
         </div>
@@ -214,7 +215,7 @@ export const TraceInspector: React.FC<TraceInspectorProps> = ({ health }) => {
             </div>
             <div className="flex justify-between items-center py-1 border-b border-slate-200/60 dark:border-slate-800/60">
               <span className="text-slate-500">Modèle LLM :</span>
-              <span className="truncate max-w-[280px] text-slate-900 dark:text-white font-medium">{telemetry?.bedrock_llm_model || health?.bedrock_llm_model}</span>
+              <span className="truncate max-w-[280px] text-slate-900 dark:text-white font-medium">{llmModel}</span>
             </div>
             <div className="flex justify-between items-center py-1 border-b border-slate-200/60 dark:border-slate-800/60">
               <span className="text-slate-500">Vector Store & Cache :</span>
@@ -289,7 +290,7 @@ export const TraceInspector: React.FC<TraceInspectorProps> = ({ health }) => {
 
           <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200">
             <BarChart3 className="w-4 h-4 text-emerald-500" />
-            <span>Bedrock Claude 3.5 & Langfuse</span>
+            <span>Azure OpenAI & Langfuse</span>
           </div>
         </div>
       </div>

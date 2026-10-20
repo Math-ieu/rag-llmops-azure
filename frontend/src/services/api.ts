@@ -1,6 +1,6 @@
 import { SystemHealth, IndexedDocument, LiveTelemetryMetrics } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'https://piajqcbwp3.eu-west-3.awsapprunner.com';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://ca-rag-llmops-backend-dev.whiteisland-cdddfb9d.eastus.azurecontainerapps.io';
 
 export async function fetchSystemHealth(): Promise<SystemHealth> {
   const res = await fetch(`${API_BASE}/api/system/health`);

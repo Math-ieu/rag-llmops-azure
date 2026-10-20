@@ -301,7 +301,7 @@ class ChatStore:
                 "satisfaction_rate": 100.0,
                 "positive_feedback_count": 0,
                 "negative_feedback_count": 0,
-                "is_live": False
+                "is_live": True
             }
 
         latencies = []
