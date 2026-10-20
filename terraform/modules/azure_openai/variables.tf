@@ -29,19 +29,19 @@ variable "openai_account_suffix" {
 variable "chat_deployment_name" {
   description = "Nom du déploiement pour le modèle de discussion"
   type        = string
-  default     = "gpt-4o-mini"
+  default     = "gpt-chat"
 }
 
 variable "chat_model_name" {
   description = "Modèle OpenAI de chat"
   type        = string
-  default     = "gpt-4o-mini"
+  default     = "gpt-5-mini"
 }
 
 variable "chat_model_version" {
   description = "Version du modèle de chat"
   type        = string
-  default     = "2024-07-18"
+  default     = "2025-08-07"
 }
 
 variable "chat_capacity" {

@@ -62,10 +62,10 @@ module "vnet" {
 
 # 3. Base de données PostgreSQL Flexible Server avec extension pgvector
 module "postgres_pgvector" {
-  source             = "./modules/postgres_pgvector"
+  source              = "./modules/postgres_pgvector"
   resource_group_name = module.resource_group.name
-  location           = module.resource_group.location
-  project_name       = var.project_name
+  location            = "francecentral"
+  project_name        = var.project_name
   environment        = var.environment
   server_name_suffix = random_string.suffix.result
   db_username        = var.db_username
@@ -134,7 +134,7 @@ module "container_app" {
 module "static_web_app" {
   source              = "./modules/static_web_app"
   resource_group_name = module.resource_group.name
-  location            = "westeurope" # Région supportée pour Static Web Apps
+  location            = "eastus2" # Région disponible pour Static Web Apps
   project_name        = var.project_name
   environment         = var.environment
   tags                = local.common_tags
